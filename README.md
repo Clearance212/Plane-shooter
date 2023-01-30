@@ -14,7 +14,7 @@ Place all required images and python file in one folder and have fun
 ---------------------------
 
 Credits:
-Clarence 
+Clarence and
 Nicholas
 
 Date: Jan 30, 2023
