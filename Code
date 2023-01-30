@@ -1,0 +1,311 @@
+#Clarence, Nicholas
+#Jan 30
+#Final project
+#Plane shooter
+
+import pygame, sys
+from pygame.locals import QUIT
+import random
+import time
+
+pygame.init()
+
+win_w, win_h = 600, 800
+
+win = pygame.display.set_mode((win_w, win_h))
+pygame.display.set_caption('Plane Shooter Game')
+# Define some colors
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+GREEN = (0, 255, 0)
+RED = (255, 0, 0)
+BLUE = (0, 0, 255)
+ORANGE = (255, 165, 0)
+GREY = 	(128, 128, 128)
+
+#Created the image we'll be using for our background
+BG = pygame.transform.scale(pygame.transform.rotate(pygame.image.load("bg.png"), 90), (win_w, win_h))
+
+#Class so that we can create enemy objects 
+class Enemy:
+    def __init__ (self, x, y, t):
+      self.x, self.y = x, y
+      self.type = t
+      self.image = enemy_imgs[t]
+      self.mask = pygame.mask.from_surface(self.image)
+
+      if self.type == "red":
+        self.speed = 2
+        self.strength = 15
+        self.hp = 25
+        self.init_cooldown = 60
+      elif self.type == "blue":
+        self.speed = 2
+        self.strength = 10
+        self.hp = 15
+        self.init_cooldown = 120
+      elif self.type == "green":
+        self.speed = 1
+        self.strength = 5
+        self.hp = 40
+        self.init_cooldown = 120
+      elif self.type == "yellow":
+        self.speed = 3
+        self.strength = ""
+        self.hp = 15
+        self.init_cooldown = ""
+
+      self.cooldown = self.init_cooldown
+
+    def draw(self):
+      win.blit(self.image, (self.x, self.y))
+
+    def hit(self, strength):
+      self.hp -= strength
+
+    def move(self):
+      self.y += self.speed
+
+    def update(self):
+      self.draw()
+      self.move()
+      if type(self.cooldown) != str:
+        if self.cooldown > 0:
+          self.cooldown -= 1
+
+#Class to create our player object
+#We decide to not use inheritance in order to debug more easily
+class Player:
+  def __init__ (self, x, y, speed, strength, hp, image, win, cooldown):
+    self.x, self.y = x, y
+    self.speed = speed
+    self.strength = strength
+    self.hp = hp
+    self.image = image
+    self.mask = pygame.mask.from_surface(self.image)
+    self.up, self.down, self.left, self.right = False, False, False, False
+    self.init_cooldown = cooldown
+    self.cooldown = cooldown
+
+  def draw(self):
+    win.blit(self.image, (self.x, self.y))
+
+  def move_up(self):
+    self.y -= self.speed
+
+  def move_down(self):
+    self.y += self.speed
+
+  def move_left(self):
+    self.x -= self.speed
+
+  def move_right(self):
+    self.x += self.speed
+
+  def hit(self, strength):
+    self.hp -= strength
+
+  def healthbar(self):
+    w, h = 50, 10
+    if self.hp >= 50:
+      colour = GREEN
+    elif self.hp >= 25:
+      colour = ORANGE
+    else:
+      colour = RED
+    pygame.draw.rect(win, GREY, (self.x+player_w/2-w/2, self.y+player_h+5, w, h))
+    pygame.draw.rect(win, colour, (self.x+player_w/2-w/2, self.y+player_h+5, w/100*self.hp, h))
+  
+  def update(self):
+    self.draw()
+    self.healthbar()
+    if self.cooldown > 0:
+      self.cooldown -= 1
+
+#Class to create bullet objects
+class Bullet:
+  def __init__(self, x, y, strength, xspeed, yspeed, image):
+    self.x = x
+    self.y = y
+    self.strength = strength
+    self.xspeed = xspeed
+    self.yspeed = yspeed
+    self.image = image
+    self.mask = pygame.mask.from_surface(self.image)
+
+  def shoot(self):
+    self.y -= self.yspeed
+
+  def draw(self):
+    win.blit(self.image, (self.x, self.y))
+
+  def update(self):
+    self.shoot()
+    self.draw()
+
+
+def collide(a, b):
+  """Returns if two objects collided"""
+  offset_x = b.x - a.x
+  offset_y = b.y - a.y
+  return a.mask.overlap(b.mask, (offset_x, offset_y)) != None  
+
+
+def in_screen(obj):
+  """Returns if an object is in the screen"""
+  return obj.y <= win_h and obj.y >= 0 and obj.x >= 0 and obj.x <= win_w
+  
+#Handles the enemy objects and sizes
+lives = 10
+stage = 0
+enemy_sizes = {"blue_w": 50, "blue_h": 43,
+              "red_w": 50, "red_h": 47.27,
+              "yellow_w": 40, "yellow_h": 40.816,
+              "green_w": 60, "green_h": 61.83}
+
+enemy_imgs = {"blue": pygame.transform.scale(pygame.image.load("enemy_blue.png"), (enemy_sizes["blue_w"], enemy_sizes["blue_h"])),
+              "red": pygame.transform.scale(pygame.image.load("enemy_red.png"), (enemy_sizes["red_w"], enemy_sizes["red_h"])),
+              "yellow": pygame.transform.scale(pygame.image.load("enemy_yellow.png"), (enemy_sizes["yellow_w"], enemy_sizes["yellow_h"])),
+              "green": pygame.transform.scale(pygame.image.load("enemy_green.png"), (enemy_sizes["green_w"], enemy_sizes["green_h"]))}
+
+#Lists for storing enemy objects so we can pop them easily according to index and keep track of them
+enemy_number = 2
+enemies = []
+
+player_bullets = []
+enemy_bullets = []
+
+#Loading imagees and creating player object an dimensions
+enemy_w = 6
+player_w, player_h = 54.4, 50   
+player_img = pygame.transform.scale(pygame.image.load("player.png"), (player_w, player_h))
+enemy_img = pygame.transform.scale(pygame.image.load("enemy_blue.png"), (60, 50))
+player = Player(win_w/2 - player_w/2, win_h-100, 4, 5, 100, player_img, win, 20)
+
+bullet_w, bullet_h = 35.5, 19.5
+bullet_img = pygame.transform.rotate(pygame.transform.scale(pygame.image.load("bullet_resized.png"), (bullet_w, bullet_h)), 90)
+
+#game_over = (pygame.image.load("game_over.png"))
+game_over = pygame.transform.scale(pygame.image.load("game_over.png"), (win_w, win_h))
+laser_w, laser_h = 30, 30
+laser_img = pygame.transform.scale(pygame.image.load("laser.png"), (30, 30))
+
+#Start of game loop
+clock = pygame.time.Clock()
+while True:
+  clock.tick(60)
+  # Update
+  #Creating font and text
+  font = pygame.font.SysFont('Times New Roman', 20)
+  live_text = font.render(f"Lives: {lives}", False, (WHITE))
+  stage_text = font.render(f"Stage: {stage}", False, (WHITE))
+  #Blitting image on screen
+  win.blit(BG, (0, 0))
+  win.blit(live_text, (0, 0))
+  win.blit(stage_text, (win_w-70, 0))
+  player.update()
+
+  #controlling the firing of the player's bullet and it's interval
+  if player.cooldown <= 0:
+    bullet = Bullet(player.x+player_w/2-bullet_h/2, player.y-bullet_h/2, player.strength, 0, 10, bullet_img)
+    player_bullets.append(bullet)
+    player.cooldown = player.init_cooldown
+
+  #If bullet out of bounds, remove them to conserve sys resources
+  #Checks for enemy collision and reduce their health
+  for bullet in player_bullets:
+    bullet.update()
+    if bullet.y < 0:
+      player_bullets.remove(bullet)
+      continue
+    for enemy in enemies:
+      if collide(bullet, enemy):
+        enemy.hp -= bullet.strength
+        player_bullets.remove(bullet)
+        if enemy.hp <= 0:
+          enemies.remove(enemy)
+        break
+
+  #Keeping track of stage number and increasing difficulty incrementally
+  #RNG generator to determine enemy spawn coord
+  if len(enemies) == 0:
+    stage += 1
+    enemy_number += 3
+    if stage == 1:
+      enemy_batch = ["blue"]
+    elif stage == 4:
+      enemy_batch = ["blue", "red"]
+    elif stage == 7:
+      enemy_batch = ["blue", "red", "yellow"]
+    elif stage == 10:
+      enemy_batch = ["blue", "red", "yellow", "green"]
+    elif stage == 15:
+      enemy_batch = ["red", "yellow", "green"]
+    for i in range(enemy_number):
+      enemy = Enemy(random.randint(0, win_w-60), random.randint(-win_h*3, 0),
+                    random.choice(enemy_batch))
+      enemies.append(enemy)
+
+  #If the enemy is out of bounds, remove them and reduce the player's lives by one
+  for enemy in enemies:
+    enemy.update()
+    if enemy.y >= win_h:
+      enemies.remove(enemy)
+      lives -= 1
+    if in_screen(enemy):
+      if type(enemy.cooldown) != str:
+        if enemy.cooldown == 0:
+          enemy.cooldown = enemy.init_cooldown
+          bullet = Bullet(enemy.x + enemy_sizes[enemy.type + "_w"]/2 - laser_w/2, enemy.y + enemy_sizes[enemy.type + "_h"], enemy.strength, 0, -5, laser_img)
+          enemy_bullets.append(bullet)
+    if collide(enemy, player):
+      enemies.remove(enemy)
+      player.hit(enemy.hp)
+      continue
+
+  #if the bullets out of bounds, delete them to conserve sys ram
+  for bullet in enemy_bullets:
+    bullet.update()
+    if bullet.y > win_h:
+      enemy_bullets.remove(bullet)
+      continue
+      #If the player is hit, reduce player's health
+    if collide(bullet, player):
+      enemy_bullets.remove(bullet)
+      player.hit(bullet.strength)
+      continue
+      #If the bullets have collided, it removes both bullet
+    for player_bullet in player_bullets:
+      if collide(bullet, player_bullet):
+        player_bullets.remove(player_bullet)
+        enemy_bullets.remove(bullet)
+        continue
+
+  #If the player's hp or lives is 0, the game quits
+  if player.hp <= 0 or lives <= 0:
+   #game over
+    lives = 0
+    win.blit(game_over, (0, 0))
+    win.blit(live_text, (0, 0))
+    win.blit(stage_text, (win_w-70, 0))
+    pygame.display.update()
+    time.sleep(10)
+
+  #Detects for key inputs from WASD
+  keys = pygame.key.get_pressed()
+  if keys[pygame.K_a] and player.x - player.speed >= 0:
+    player.move_left()
+  if keys[pygame.K_d] and player.x + player.speed + player_w <= win_w:
+    player.move_right()
+  if keys[pygame.K_w] and player.y - player.speed >= 0:
+    player.move_up()
+  if keys[pygame.K_s] and player.y + player.speed + player_h <= win_h:
+    player.move_down()
+    
+
+  for event in pygame.event.get():
+    if event.type == QUIT:
+      pygame.quit()
+      sys.exit()
+  pygame.display.update()
+
